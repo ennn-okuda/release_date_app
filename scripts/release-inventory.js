@@ -67,6 +67,7 @@ async function findReleaseTargets(now) {
   const allProducts = [];
   let cursor = null;
   let hasNextPage = true;
+  let pageCount = 0;
 
   // status:active の商品を全ページ取得する(店舗の商品数が多くても漏れなく検索するため)
   while (hasNextPage) {
@@ -75,9 +76,20 @@ async function findReleaseTargets(now) {
       cursor,
     });
 
+    pageCount += 1;
     allProducts.push(...data.products.edges.map((edge) => edge.node));
     hasNextPage = data.products.pageInfo.hasNextPage;
     cursor = data.products.pageInfo.endCursor;
+  }
+
+  console.log(`[debug] status:active の商品を ${pageCount} ページ、計 ${allProducts.length} 件取得しました。`);
+
+  const withReleaseDate = allProducts.filter((p) => p.releaseDate);
+  console.log(`[debug] release_date が設定されている商品: ${withReleaseDate.length} 件`);
+  for (const p of withReleaseDate) {
+    console.log(
+      `[debug]   ${p.id} releaseDate=${p.releaseDate.value} processed=${p.processed ? p.processed.value : "(未設定)"}`
+    );
   }
 
   return allProducts.filter((product) => {
