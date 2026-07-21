@@ -104,13 +104,13 @@ async function releaseInventory(product, stockConfig) {
     inventoryItemId: edge.node.inventoryItem.id,
     locationId: LOCATION_ID,
     quantity: resolveStockQuantity(product.id, stockConfig),
+    ignoreCompareQuantity: true,
   }));
 
   const result = await shopifyGraphQL(SET_INVENTORY_MUTATION, {
     input: {
       reason: "correction",
       name: "available",
-      ignoreCompareQuantity: true,
       quantities,
     },
   });
