@@ -1,0 +1,6 @@
+{
+  "default": 10,
+  "overrides": {
+    "gid://shopify/Product/0000000000": 25
+  }
+}

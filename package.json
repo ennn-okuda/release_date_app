@@ -1,8 +1,13 @@
 {
-  "name": "shopify-release",
-  "type": "module",
+  "name": "shopify-scheduled-release",
+  "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "description": "release_date メタフィールドに基づき、公開済み商品の在庫を自動解放するツール",
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
+  },
+  "scripts": {
+    "release": "node scripts/release-inventory.js"
   }
 }
