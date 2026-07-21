@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { shopifyGraphQL } from "./lib/shopify-client.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,8 +29,8 @@ const FIND_TARGETS_QUERY = `
 `;
 
 const SET_INVENTORY_MUTATION = `
-  mutation setInventory($input: InventorySetQuantitiesInput!) {
-    inventorySetQuantities(input: $input) {
+  mutation setInventory($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+    inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
       userErrors { field message }
     }
   }
@@ -114,6 +115,7 @@ async function releaseInventory(product, stockConfig) {
       name: "available",
       quantities,
     },
+    idempotencyKey: randomUUID(),
   });
 
   const errors = result.inventorySetQuantities.userErrors;
