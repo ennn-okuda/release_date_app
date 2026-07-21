@@ -7,12 +7,15 @@ GitHub Actionsが自動的に在庫数を解放して販売を開始する仕組
 
 ### 1. カスタムアプリの作成
 
-1. Shopify管理画面 → **設定 → アプリと販売チャネル → アプリを開発する**
+1. Shopify管理画面 → **設定 → アプリと販売チャネル → アプリを開発する**(Dev Dashboard)
 2. アプリを作成し、以下のAccess scopesを設定
    - `read_products`, `write_products`
    - `read_inventory`, `write_inventory`
    - `read_locations`
-3. アプリをインストールし、Admin API access tokenを発行
+3. アプリをインストール
+4. **Settings** ページで **Client ID** と **Client Secret** を控える
+
+> 2026年1月以降、Dev Dashboardで新規作成したカスタムアプリは画面上に固定のAdmin API access token(`shpat_`)が表示されません。代わりにClient ID / Client Secretが表示され、これらを使ってプログラム側でトークンを取得する **Client Credentials Grant** という方式に変わっています。本リポジトリのスクリプトはこの方式に対応済みです。
 
 ### 2. メタフィールド定義の作成
 
@@ -49,7 +52,8 @@ query {
 | Secret名 | 内容 |
 |---|---|
 | `SHOPIFY_SHOP` | `your-shop.myshopify.com` |
-| `SHOPIFY_ADMIN_TOKEN` | Admin API access token |
+| `SHOPIFY_CLIENT_ID` | Dev DashboardのSettingsページに表示されるClient ID |
+| `SHOPIFY_CLIENT_SECRET` | 同ページに表示されるClient Secret |
 | `SHOPIFY_LOCATION_ID` | `gid://shopify/Location/xxxx` |
 
 ## 在庫数量の管理
@@ -72,7 +76,8 @@ query {
 
 ```bash
 export SHOPIFY_SHOP=your-shop.myshopify.com
-export SHOPIFY_ADMIN_TOKEN=shpat_xxxx
+export SHOPIFY_CLIENT_ID=xxxx
+export SHOPIFY_CLIENT_SECRET=shpss_xxxx
 export SHOPIFY_LOCATION_ID=gid://shopify/Location/xxxx
 
 npm run release
@@ -81,10 +86,11 @@ npm run release
 ## 動作の流れ
 
 1. GitHub Actionsが15分おきに起動(`workflow_dispatch` で手動実行も可能)
-2. `status:active` かつ `release_processed != true` の商品を検索
-3. `release_date` <= 現在時刻の商品を抽出
-4. `config/release-stock.json` の数量で在庫を設定(`inventorySetQuantities`)
-5. 成功した商品には `release_processed = true` を設定し、二重処理を防止
+2. Client Credentials Grantでアクセストークンを取得(`SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` を使用、有効期限24時間)
+3. `status:active` かつ `release_processed != true` の商品を検索
+4. `release_date` <= 現在時刻の商品を抽出
+5. `config/release-stock.json` の数量で在庫を設定(`inventorySetQuantities`)
+6. 成功した商品には `release_processed = true` を設定し、二重処理を防止
 
 ## 注意点
 
@@ -92,3 +98,5 @@ npm run release
 - `release_date`はUTCで統一して運用することを推奨します。
 - ストアフロントやCDNのキャッシュにより、在庫反映まで数分のタイムラグが出る場合があります。
 - 対象商品数が多い場合はGraphQLのレート制限に注意し、必要に応じてページネーションやリトライ処理を追加してください。
+- Client Credentials Grantは**自社が所有するストアにインストールした自社アプリ**でのみ利用可能です。`shop_not_permitted` エラーが出る場合は、アプリとストアが同じ組織に属しているか確認してください。
+- Client Secretは非常に機密性の高い情報です。リポジトリに直接コミットせず、必ずGitHub Secrets経由で渡してください。
