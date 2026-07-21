@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "release": "node scripts/release-inventory.js"
+    "release": "node scripts/release-inventory.js",
+    "setup:token": "node scripts/setup/get-offline-token.js"
   }
 }
