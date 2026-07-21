@@ -104,7 +104,8 @@ async function releaseInventory(product, stockConfig) {
     inventoryItemId: edge.node.inventoryItem.id,
     locationId: LOCATION_ID,
     quantity: resolveStockQuantity(product.id, stockConfig),
-    ignoreCompareQuantity: true,
+    // 比較チェックを行わず、常に絶対値で在庫を設定する(2026-01以降の仕様)
+    changeFromQuantity: null,
   }));
 
   const result = await shopifyGraphQL(SET_INVENTORY_MUTATION, {
