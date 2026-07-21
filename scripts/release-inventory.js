@@ -7,8 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCATION_ID = process.env.SHOPIFY_LOCATION_ID;
 
 const FIND_TARGETS_QUERY = `
-  query getScheduledProducts($q: String!) {
-    products(first: 50, query: $q) {
+  query getScheduledProducts($q: String!, $cursor: String) {
+    products(first: 50, after: $cursor, query: $q) {
       edges {
         node {
           id
@@ -18,6 +18,10 @@ const FIND_TARGETS_QUERY = `
             edges { node { id inventoryItem { id } } }
           }
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -60,15 +64,27 @@ function resolveStockQuantity(productId, stockConfig) {
 }
 
 async function findReleaseTargets(now) {
-  const data = await shopifyGraphQL(FIND_TARGETS_QUERY, { q: "status:active" });
+  const allProducts = [];
+  let cursor = null;
+  let hasNextPage = true;
 
-  return data.products.edges
-    .map((edge) => edge.node)
-    .filter((product) => {
-      if (!product.releaseDate) return false;
-      if (product.processed && product.processed.value === "true") return false;
-      return new Date(product.releaseDate.value) <= now;
+  // status:active の商品を全ページ取得する(店舗の商品数が多くても漏れなく検索するため)
+  while (hasNextPage) {
+    const data = await shopifyGraphQL(FIND_TARGETS_QUERY, {
+      q: "status:active",
+      cursor,
     });
+
+    allProducts.push(...data.products.edges.map((edge) => edge.node));
+    hasNextPage = data.products.pageInfo.hasNextPage;
+    cursor = data.products.pageInfo.endCursor;
+  }
+
+  return allProducts.filter((product) => {
+    if (!product.releaseDate) return false;
+    if (product.processed && product.processed.value === "true") return false;
+    return new Date(product.releaseDate.value) <= now;
+  });
 }
 
 async function releaseInventory(product, stockConfig) {
