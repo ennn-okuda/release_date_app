@@ -1,11 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { shopifyGraphQL } from "./lib/shopify-client.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCATION_ID = process.env.SHOPIFY_LOCATION_ID;
+// custom.release_stock が未設定の商品に適用するデフォルト在庫数
+const DEFAULT_RELEASE_STOCK = Number(process.env.DEFAULT_RELEASE_STOCK ?? 10);
 
 const FIND_TARGETS_QUERY = `
   query getScheduledProducts($q: String!, $cursor: String) {
@@ -15,6 +13,7 @@ const FIND_TARGETS_QUERY = `
           id
           releaseDate: metafield(namespace: "custom", key: "release_date") { value }
           processed: metafield(namespace: "custom", key: "release_processed") { value }
+          releaseStock: metafield(namespace: "custom", key: "release_stock") { value }
           variants(first: 50) {
             edges { node { id inventoryItem { id } } }
           }
@@ -51,17 +50,20 @@ const MARK_PROCESSED_MUTATION = `
   }
 `;
 
-async function loadStockConfig() {
-  const configPath = path.join(__dirname, "..", "config", "release-stock.json");
-  const raw = await readFile(configPath, "utf-8");
-  return JSON.parse(raw);
-}
-
-function resolveStockQuantity(productId, stockConfig) {
-  if (stockConfig.overrides && productId in stockConfig.overrides) {
-    return stockConfig.overrides[productId];
+// custom.release_stock の値を数量として使う。未設定・不正値の場合はデフォルトにフォールバックする
+function resolveStockQuantity(product) {
+  const raw = product.releaseStock?.value;
+  if (raw === undefined || raw === null || raw === "") {
+    return DEFAULT_RELEASE_STOCK;
   }
-  return stockConfig.default ?? 0;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    console.warn(
+      `[warn] ${product.id} の release_stock が不正な値 (${raw}) のため、デフォルト値 ${DEFAULT_RELEASE_STOCK} を使用します。`
+    );
+    return DEFAULT_RELEASE_STOCK;
+  }
+  return parsed;
 }
 
 async function findReleaseTargets(now) {
@@ -89,7 +91,7 @@ async function findReleaseTargets(now) {
   console.log(`[debug] release_date が設定されている商品: ${withReleaseDate.length} 件`);
   for (const p of withReleaseDate) {
     console.log(
-      `[debug]   ${p.id} releaseDate=${p.releaseDate.value} processed=${p.processed ? p.processed.value : "(未設定)"}`
+      `[debug]   ${p.id} releaseDate=${p.releaseDate.value} processed=${p.processed ? p.processed.value : "(未設定)"} releaseStock=${p.releaseStock ? p.releaseStock.value : "(未設定)"}`
     );
   }
 
@@ -100,11 +102,13 @@ async function findReleaseTargets(now) {
   });
 }
 
-async function releaseInventory(product, stockConfig) {
+async function releaseInventory(product) {
+  const stockQuantity = resolveStockQuantity(product);
+
   const quantities = product.variants.edges.map((edge) => ({
     inventoryItemId: edge.node.inventoryItem.id,
     locationId: LOCATION_ID,
-    quantity: resolveStockQuantity(product.id, stockConfig),
+    quantity: stockQuantity,
     // 比較チェックを行わず、常に絶対値で在庫を設定する(2026-01以降の仕様)
     changeFromQuantity: null,
   }));
@@ -141,7 +145,6 @@ async function main() {
   }
 
   const now = new Date();
-  const stockConfig = await loadStockConfig();
   const targets = await findReleaseTargets(now);
 
   console.log(`対象商品: ${targets.length}件`);
@@ -149,8 +152,9 @@ async function main() {
   let successCount = 0;
 
   for (const product of targets) {
-    console.log(`在庫解放を実行中: ${product.id}`);
-    const success = await releaseInventory(product, stockConfig);
+    const quantity = resolveStockQuantity(product);
+    console.log(`在庫解放を実行中: ${product.id} (数量: ${quantity})`);
+    const success = await releaseInventory(product);
 
     if (success) {
       await markAsProcessed(product.id);

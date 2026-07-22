@@ -48,6 +48,7 @@ npm run setup:token
 |---|---|---|
 | `custom.release_date` | Date and time | 販売を開始する日時 |
 | `custom.release_processed` | True or false | 処理済みかどうかのフラグ(初期値 `false`) |
+| `custom.release_stock` | Integer(整数) | 公開時に投入する在庫数(未設定の場合は`DEFAULT_RELEASE_STOCK`を使用) |
 
 ### 4. 商品の初期設定
 
@@ -82,19 +83,20 @@ query {
 
 ## 在庫数量の管理
 
-`config/release-stock.json` で、商品ごとに公開時に投入する在庫数を管理します。
+商品ごとの在庫数は、**Shopify管理画面の商品編集画面から直接設定**します。
 
-```json
-{
-  "default": 10,
-  "overrides": {
-    "gid://shopify/Product/xxxx": 25
-  }
-}
+1. 対象商品の編集画面を開く
+2. メタフィールドのセクションで `release_stock` に、公開時に投入したい数量(整数)を入力
+3. 保存
+
+`release_stock` を設定していない商品は、GitHub ActionsのSecrets(または環境変数)`DEFAULT_RELEASE_STOCK` の値が使われます(未設定の場合はスクリプト内のデフォルト値 `10`)。
+
+デフォルト値を変更したい場合は、`.github/workflows/release-scheduled.yml` の `DEFAULT_RELEASE_STOCK` を書き換えてください。
+
+```yaml
+env:
+  DEFAULT_RELEASE_STOCK: "10"   # ここを変更
 ```
-
-- `default`: 個別指定のない商品に適用される在庫数
-- `overrides`: 商品ID(gid)をキーにした個別の在庫数
 
 ## ローカルでの動作確認
 
@@ -112,7 +114,7 @@ npm run release
 2. `SHOPIFY_ADMIN_TOKEN`(オフラインアクセストークン)を使ってShopify Admin GraphQL APIを呼び出す
 3. `status:active` かつ `release_processed != true` の商品を検索
 4. `release_date` <= 現在時刻の商品を抽出
-5. `config/release-stock.json` の数量で在庫を設定(`inventorySetQuantities`)
+5. 各商品の `release_stock` メタフィールド(未設定なら `DEFAULT_RELEASE_STOCK`)の数量で在庫を設定(`inventorySetQuantities`)
 6. 成功した商品には `release_processed = true` を設定し、二重処理を防止
 
 ## 注意点
